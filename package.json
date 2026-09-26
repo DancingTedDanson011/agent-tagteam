@@ -1,0 +1,86 @@
+{
+  "name": "cli-organizer",
+  "productName": "CLI Organizer",
+  "version": "0.5.0",
+  "description": "Pull running console windows into one organized workspace.",
+  "author": "Marco Sadjadi",
+  "license": "FSL-1.1-MIT",
+  "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:win": "vitest run --config vitest.win32.config.ts",
+    "dist": "electron-vite build && electron-builder --win",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/headless": "6.0.0",
+    "@xterm/xterm": "6.0.0",
+    "koffi": "3.3.1",
+    "node-pty": "1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "44.4.4",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vitest": "5.0.1"
+  },
+  "build": {
+    "appId": "local.cli-organizer",
+    "productName": "CLI Organizer",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**",
+      "node_modules/@koromix/**",
+      "node_modules/node-pty/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/watchdog.ps1",
+        "to": "watchdog.ps1"
+      },
+      {
+        "from": "resources/clio-mcp.cjs",
+        "to": "clio-mcp.cjs"
+      },
+      {
+        "from": "resources/clio-whisper.py",
+        "to": "clio-whisper.py"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "CLI-Organizer-${version}-portable.exe"
+    },
+    "npmRebuild": false
+  }
+}

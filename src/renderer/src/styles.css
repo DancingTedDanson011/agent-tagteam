@@ -1,0 +1,1857 @@
+/*
+  Design thesis: a calm, dark control desk. The terminals are the stage; the chrome recedes into a
+  thin frame. The one recurring motif is the status stripe: every session carries a colored edge
+  that says "idle", "working" (amber) or "waiting for you" (green) — taken from the job itself,
+  watching agents.
+*/
+
+/* color-scheme sits on body: the body never scrolls, and every scroll container and input inherits it. */
+:root {
+  --bg: #0b0e13;
+  --surface: #141a22;
+  --surface-raised: #1b2330;
+  --line: #263142;
+  --line-strong: #3a4a63;
+  --text: #e7edf5;
+  --text-muted: #a3b3c6;
+  --brand: #8ab4ff;
+  /* Primary action: light on dark (Marco's choice) — no clash with the amber/green status colours. */
+  --action: #dfe6f0;
+  --action-hover: #c8d2e0;
+  --action-active: #b4c0d2;
+  --action-text: #0b0e13;
+  --working: #f2b33d;
+  --waiting: #3fd08f;
+  --waiting-ink: #7ee8b5;
+  --danger: #ff8a80;
+  --focus: #ffd166;
+  /* State rings (hover/active) instead of fills: >= 4.5:1 on every surface, measured. */
+  --ring: #7d8aa0;
+  --ring-strong: #b6c2d4;
+
+  --radius: 10px;
+  --radius-small: 7px;
+  --titlebar-h: 44px;
+
+  --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+
+  --text-xs: 11.5px;
+  --text-s: 12.5px;
+  --text-m: 13.5px;
+  --text-l: 18px;
+  --text-xl: 26px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color-scheme: dark;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--text-m) / 1.45 var(--font);
+  overflow: hidden;
+  user-select: none;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  padding: 0; /* the browser default (1px 6px) is off the 4px scale; components set their own */
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.icon {
+  flex: none;
+  display: block;
+}
+
+/* ---------- app frame ---------- */
+
+/* The title bar row is auto: on narrow windows it wraps onto two rows instead of overflowing. */
+.app {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+/* Explicit rows: the notice slot is display:none when empty and must not shift the stage
+   into the auto-sized row (measured: stage collapsed to 60px in the grid view). */
+.titlebar {
+  grid-row: 1;
+}
+.notice-slot {
+  grid-row: 2;
+}
+.stage {
+  grid-row: 3;
+}
+.bottom-bar {
+  grid-row: 4;
+}
+
+/* ---------- title bar (never covered by terminals: drop hints and notices live up here) ---------- */
+
+.titlebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: var(--titlebar-h);
+  gap: 16px;
+  padding: 0 0 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+  transition: background-color 160ms ease;
+}
+
+.titlebar button,
+.titlebar input {
+  -webkit-app-region: no-drag;
+}
+
+.titlebar.is-dragging {
+  background: #16233a;
+}
+
+.titlebar.is-over {
+  background: #173327;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brand-mark {
+  display: grid;
+  grid-template-rows: repeat(3, 3px);
+  gap: 4px;
+  width: 16px;
+}
+
+.brand-mark i {
+  display: block;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+
+.brand-mark i.is-working {
+  background: var(--working);
+  width: 70%;
+}
+
+.brand-mark i.is-waiting {
+  background: var(--waiting);
+}
+
+.brand-name {
+  margin: 0;
+  font: 600 var(--text-m) / 1 var(--font-display);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.view-switch {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 auto;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.view-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+
+.view-button:hover {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.view-button:active {
+  color: var(--text);
+  box-shadow: inset 0 0 0 2px var(--ring-strong);
+}
+
+.view-button[aria-pressed='true'] {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--brand);
+}
+
+.view-button[aria-pressed='true']:hover {
+  box-shadow: inset 0 -2px 0 var(--brand), inset 0 0 0 1px var(--ring);
+}
+
+/* Language: same well and ring states as the view switch, smaller because it is a setting. */
+.lang-switch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.lang-button {
+  min-width: 32px;
+  height: 24px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.lang-button:hover {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.lang-button:active {
+  color: var(--text);
+  box-shadow: inset 0 0 0 2px var(--ring-strong);
+}
+
+.lang-button[aria-checked='true'] {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--brand);
+}
+
+.lang-button[aria-checked='true']:hover {
+  box-shadow: inset 0 -2px 0 var(--brand), inset 0 0 0 1px var(--ring);
+}
+
+.drop-hint {
+  margin: 0 auto;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.titlebar.is-over .drop-hint {
+  color: var(--waiting-ink);
+}
+
+.titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.window-controls {
+  display: flex;
+  align-self: stretch;
+}
+
+.window-button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  min-height: 32px; /* a wrapped title bar row can be shorter than a click target (probe at 375 px) */
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.window-button:hover {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.window-button:active {
+  color: var(--text);
+  box-shadow: inset 0 0 0 2px var(--ring-strong);
+}
+
+/* Close keeps the platform's red fill: 3.09:1 against the bar, white icon 5.66:1 (measured). */
+.window-button.is-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.window-button.is-close:active {
+  background: #c9301f;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.window-button:focus-visible {
+  outline-offset: -2px;
+}
+
+/* ---------- buttons ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-small);
+  border: 1px solid transparent;
+  font-size: var(--text-s);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.button.is-primary {
+  background: var(--action);
+  color: var(--action-text);
+}
+
+.button.is-primary:hover {
+  background: var(--action-hover);
+}
+
+.button.is-primary:active {
+  background: var(--action-active);
+}
+
+.button.is-quiet {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.button.is-quiet:hover {
+  border-color: var(--ring);
+}
+
+.button.is-quiet:active {
+  border-color: var(--ring-strong);
+  box-shadow: inset 0 0 0 1px var(--ring-strong);
+}
+
+.button.is-compact {
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--text-xs);
+}
+
+.button:disabled,
+.button:disabled:hover {
+  background: transparent;
+  border-color: var(--line);
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.icon-button:hover {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.icon-button:active {
+  color: var(--text);
+  box-shadow: inset 0 0 0 2px var(--ring-strong);
+}
+
+/* ---------- notices ---------- */
+
+.notice-slot:empty {
+  display: none;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+  background: #2a2112;
+  border-bottom: 1px solid #5a4418;
+  color: #ffe2a8;
+  font-size: var(--text-s);
+}
+
+.notice .icon-button {
+  color: #ffe2a8;
+}
+
+.notice .icon-button:hover {
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px #ffe2a8;
+}
+
+/* ---------- stage ---------- */
+
+.stage {
+  position: relative;
+  min-height: 0;
+  padding: 8px;
+}
+
+.app.is-drop-target .stage {
+  outline: 2px dashed var(--brand);
+  outline-offset: -6px;
+}
+
+.app.is-drop-over .stage {
+  outline: 2px solid var(--waiting);
+  background: rgb(63 208 143 / 0.06);
+}
+
+/* ---------- tiles: header on top, the real terminal is placed over the body ---------- */
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.tile::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--line-strong);
+  transition: background-color 200ms ease;
+}
+
+.tile.is-working::before {
+  background: linear-gradient(90deg, var(--working) 0 40%, rgb(242 179 61 / 0.35) 40% 100%);
+  background-size: 250% 100%;
+  animation: working-sweep 1.6s linear infinite;
+}
+
+.tile.is-waiting::before {
+  background: var(--waiting);
+}
+
+.tile.has-badge {
+  border-color: rgb(63 208 143 / 0.6);
+}
+
+@keyframes working-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 4px 8px 0 12px;
+  flex: none;
+}
+
+.session-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 48px; /* stays a real click target (WCAG 2.5.8) however crowded the header gets */
+  flex: 1;
+  padding: 0 8px;
+  margin-left: -8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+
+.session-name:hover {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.session-name:active {
+  box-shadow: inset 0 0 0 2px var(--ring-strong);
+}
+
+.session-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: var(--text-s);
+  line-height: 1.3;
+}
+
+.session-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+}
+
+.session-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.tile-body {
+  flex: 1;
+  min-height: 0;
+  background: #07090d;
+}
+
+.status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.status-dot.is-working {
+  background: var(--working);
+}
+
+.status-dot.is-waiting {
+  background: var(--waiting);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 22px;
+  padding: 0 8px 0 8px;
+  border-radius: 11px;
+  background: rgb(63 208 143 / 0.14);
+  border: 1px solid rgb(63 208 143 / 0.55);
+  color: var(--waiting-ink);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--waiting);
+  animation: badge-pulse 1.2s ease-out 3;
+}
+
+@keyframes badge-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(63 208 143 / 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgb(63 208 143 / 0);
+  }
+}
+
+/* ---------- focus view ---------- */
+
+.focus-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 8px;
+  height: 100%;
+}
+
+.focus-view.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.focus-main {
+  min-width: 0;
+  min-height: 0;
+}
+
+.focus-side {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.side-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Re-sorting by drag: the other cards slide to make room, the dragged one follows the pointer. */
+.side-list li {
+  position: relative;
+  transition: transform 160ms ease;
+}
+
+.side-list li.is-dragging {
+  z-index: 2;
+  transition: none;
+}
+
+.side-list li.is-dragging .side-card {
+  border-color: var(--ring-strong);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.5);
+}
+
+.side-list.is-sorting .side-card {
+  cursor: grabbing;
+}
+
+.side-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0 8px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.side-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--line-strong);
+}
+
+.side-card.is-working::before {
+  background: var(--working);
+}
+
+.side-card.is-waiting::before {
+  background: var(--waiting);
+}
+
+.side-card:hover {
+  border-color: var(--ring);
+}
+
+.side-card:active {
+  border-color: var(--ring-strong);
+  box-shadow: inset 0 0 0 1px var(--ring-strong);
+}
+
+.side-card.has-badge {
+  border-color: var(--waiting);
+  box-shadow: 0 0 0 1px rgb(63 208 143 / 0.35);
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 4px 0;
+}
+
+.side-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: var(--text-s);
+}
+
+.side-thumb {
+  display: block;
+  aspect-ratio: 16 / 10;
+  border-radius: 6px;
+  background: #07090d;
+}
+
+.placeholder {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+}
+
+/* ---------- grid view ---------- */
+
+.grid-view {
+  display: grid;
+  gap: 8px;
+  height: 100%;
+}
+
+/* ---------- free view ---------- */
+
+.free-view {
+  position: relative;
+  height: 100%;
+}
+
+.tile.is-floating {
+  position: absolute;
+  height: auto;
+  padding: 0 12px 12px 0;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+}
+
+.tile.is-floating .session-header {
+  cursor: grab;
+  padding-right: 0;
+}
+
+.tile.is-floating .session-header:active {
+  cursor: grabbing;
+}
+
+.tile.is-floating .tile-body {
+  margin-left: 8px;
+}
+
+.resize-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  padding: 0;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 0 50%, var(--ring) 50% 58%, transparent 58% 70%, var(--ring) 70% 78%, transparent 78%);
+}
+
+.resize-grip:hover {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.resize-grip:active {
+  box-shadow: inset 0 0 0 2px var(--ring-strong);
+}
+
+/* ---------- tabs view ---------- */
+
+.tabs-view {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  height: 100%;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 240px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+
+.tab:hover {
+  border-color: var(--ring);
+  color: var(--text);
+}
+
+.tab:active {
+  border-color: var(--ring-strong);
+  box-shadow: inset 0 0 0 1px var(--ring-strong);
+}
+
+.tab[aria-selected='true'] {
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--brand);
+}
+
+.tab.has-badge {
+  border-color: var(--waiting);
+}
+
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-badge {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--waiting);
+  box-shadow: 0 0 0 3px rgb(63 208 143 / 0.25);
+}
+
+.tab-panel {
+  min-height: 0;
+}
+
+/* ---------- dock ---------- */
+
+.dock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 12px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.dock-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dock-list {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.dock-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  max-width: 260px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-s);
+}
+
+.dock-item:hover {
+  border-color: var(--ring);
+}
+
+.dock-item:active {
+  border-color: var(--ring-strong);
+  box-shadow: inset 0 0 0 1px var(--ring-strong);
+}
+
+.dock-item.has-badge {
+  border-color: var(--waiting);
+}
+
+.dock-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-badge {
+  color: var(--waiting-ink);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+/* ---------- empty state ---------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.empty h2 {
+  margin: 8px 0 0;
+  font: 600 var(--text-xl) / 1.2 var(--font-display);
+}
+
+.empty p {
+  margin: 0;
+  color: var(--text-muted);
+  max-width: 48ch;
+  user-select: text;
+}
+
+.empty > p:first-of-type {
+  color: var(--text);
+}
+
+.empty .hint {
+  font-size: var(--text-s);
+}
+
+.empty-figure {
+  position: relative;
+  width: 220px;
+  height: 110px;
+}
+
+.ghost-window,
+.ghost-target {
+  position: absolute;
+  border-radius: 8px;
+}
+
+.ghost-window {
+  left: 0;
+  top: 8px;
+  width: 92px;
+  height: 64px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: inset 0 12px 0 var(--surface-raised);
+}
+
+.ghost-target {
+  right: 0;
+  top: 28px;
+  width: 96px;
+  height: 72px;
+  border: 1.5px dashed var(--brand);
+  background: rgb(138 180 255 / 0.06);
+}
+
+.ghost-arrow {
+  position: absolute;
+  left: 100px;
+  top: 50px;
+  width: 20px;
+  height: 1.5px;
+  background: var(--brand);
+}
+
+.ghost-arrow::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -3.5px;
+  border: 4px solid transparent;
+  border-left: 6px solid var(--brand);
+  border-right: 0;
+}
+
+/* ---------- dialogs ---------- */
+
+.dialog {
+  width: min(600px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+}
+
+.dialog::backdrop {
+  background: rgb(5 8 12 / 0.72);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 12px 8px 20px;
+}
+
+.dialog-head h2 {
+  margin: 0;
+  font: 600 var(--text-l) / 1.3 var(--font-display);
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 20px 20px;
+  user-select: text;
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-s);
+}
+
+.candidate-list,
+.workspace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.candidate,
+.workspace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.workspace.is-active {
+  border-color: var(--brand);
+}
+
+.candidate-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.candidate-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.candidate-meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.save-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.save-form label {
+  font-weight: 600;
+  font-size: var(--text-s);
+}
+
+.save-row {
+  display: flex;
+  gap: 8px;
+}
+
+.save-row input {
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ring); /* a text field is recognised by its edge: 4.52:1 on the dialog */
+  border-radius: var(--radius-small);
+  background: var(--bg);
+  user-select: text;
+}
+
+.save-row input:hover {
+  border-color: var(--ring-strong);
+}
+
+.save-row input:focus-visible {
+  outline-offset: 0;
+}
+
+.save-row input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.save-row input:disabled {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+/* ---------- agent tiles (terminals this app runs itself) ---------- */
+
+.term-body {
+  position: relative;
+  padding: 4px 0 0 8px;
+  overflow: hidden;
+}
+
+.term-host,
+.term-host .xterm {
+  height: 100%;
+}
+
+.side-text {
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #07090d;
+}
+
+/* The whole screen at terminal size, scaled down to the card (AgentPreview sets the scale). */
+.side-text pre {
+  margin: 0;
+  padding: 6px 8px;
+  transform-origin: 0 0;
+  color: var(--text);
+  font: 400 13px / 1.2 'Cascadia Mono', Consolas, monospace;
+  white-space: pre;
+  text-align: left;
+}
+
+.chip {
+  flex: none;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.chip.is-orchestrator {
+  border-color: var(--brand);
+  color: var(--text);
+}
+
+/* A narrow tile keeps name and the essential buttons; role chip and unlock return in wider tiles. */
+.tile {
+  container-type: inline-size;
+}
+
+@container (max-width: 420px) {
+  .chip,
+  .unlock-button {
+    display: none;
+  }
+}
+
+.unlock-button[aria-pressed='true'] {
+  border-color: var(--brand);
+  box-shadow: inset 0 -2px 0 var(--brand);
+}
+
+.button.is-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.agent-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.agent-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.agent-form legend,
+.field-label {
+  padding: 0;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: var(--text-s);
+}
+
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.choice-list.is-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  cursor: pointer;
+}
+
+.choice input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--brand);
+}
+
+.choice.is-missing {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.choice-note {
+  font-size: var(--text-xs);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+}
+
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: var(--text-s);
+}
+
+.folder-path.is-empty {
+  color: var(--text-muted);
+  font-family: inherit;
+}
+
+.field textarea {
+  min-height: 72px;
+  padding: 8px;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-small);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+  user-select: text;
+}
+
+.field textarea:hover {
+  border-color: var(--ring-strong);
+}
+
+.field textarea:focus-visible {
+  outline-offset: 0;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------- narrow windows ---------- */
+
+/* Labels collapse visually but keep the accessible name (display:none would remove it). */
+@media (max-width: 1100px) {
+  .view-button span,
+  .workspace-label,
+  .agent-label,
+  .instance-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .view-button {
+    padding: 0 8px;
+  }
+  .focus-view {
+    grid-template-columns: minmax(0, 1fr) 230px;
+  }
+}
+
+@media (max-width: 860px) {
+  .brand-name {
+    display: none;
+  }
+  .button.is-primary span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .focus-view {
+    grid-template-columns: minmax(0, 1fr) 180px;
+  }
+}
+
+@media (max-width: 560px) {
+  .titlebar {
+    gap: 8px;
+    padding-left: 8px;
+  }
+  .brand {
+    margin-right: auto;
+  }
+  .view-switch {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: center;
+    margin: 0 8px 8px 0;
+  }
+  .window-button {
+    width: 40px;
+  }
+  .focus-view {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .focus-side {
+    max-height: 40vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .tile.is-working::before {
+    background: var(--working);
+  }
+}
+
+@media (forced-colors: active) {
+  .tile::before,
+  .side-card::before,
+  .status-dot,
+  .badge-dot,
+  .tab-badge {
+    forced-color-adjust: none;
+  }
+}
+
+/* ---------- focus view: the open session stays in the list, highlighted ---------- */
+
+.side-card.is-open {
+  border-color: var(--brand);
+  background: linear-gradient(180deg, rgb(138 180 255 / 0.12), rgb(138 180 255 / 0.03) 60%);
+  box-shadow:
+    0 0 0 1px var(--brand),
+    0 0 18px rgb(138 180 255 / 0.28);
+  cursor: default;
+}
+
+.side-card.is-open:hover {
+  border-color: var(--brand);
+}
+
+.open-mark {
+  flex: none;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 9px;
+  background: var(--brand);
+  color: var(--bg);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 18px;
+}
+
+/* Agent icon on a small card: unlock the tile for an orchestrator. */
+.card-unlock {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+}
+
+.card-unlock:hover {
+  color: var(--text);
+  border-color: var(--ring);
+}
+
+.card-unlock:active {
+  border-color: var(--ring-strong);
+  box-shadow: inset 0 0 0 1px var(--ring-strong);
+}
+
+.card-unlock[aria-pressed='true'] {
+  color: var(--bg);
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.chip.is-attention {
+  border-color: var(--working);
+  color: var(--working);
+}
+
+/* ---------- terminal hint and bottom bar ---------- */
+
+.term-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgb(20 26 34 / 0.9);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  pointer-events: none;
+}
+
+.bottom-bar {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.bottom-bar .dock {
+  border-top: 1px solid var(--line);
+}
+
+.launch-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.launch-folder {
+  flex: 1;
+  min-width: 160px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-small);
+  background: var(--bg);
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: var(--text-s);
+  user-select: text;
+}
+
+.launch-folder:hover {
+  border-color: var(--ring-strong);
+}
+
+.launch-folder:focus-visible {
+  outline-offset: 0;
+}
+
+.launch-folder[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.launch-error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: var(--text-s);
+}
+
+/* ---------- names and colours of sessions ---------- */
+
+/* The session colour is the user's own label: a dot beside the name and a thin top line on the
+   header — never the left edge, which stays the status stripe. */
+.session-header.has-color {
+  box-shadow: inset 0 2px 0 var(--session-color);
+}
+
+.style-button {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+/* Squares, not dots: round marks are the status (and green there means "waits for you"). */
+.style-chip {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.style-chip.is-empty {
+  box-shadow: inset 0 0 0 1.5px var(--ring);
+}
+
+.color-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.style-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.style-form > label {
+  font-weight: 600;
+  font-size: var(--text-s);
+}
+
+.style-form input[type='text'],
+.style-form input:not([type]) {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-small);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  user-select: text;
+}
+
+.style-form input:not([type]):hover {
+  border-color: var(--ring-strong);
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.swatches legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-weight: 600;
+  font-size: var(--text-s);
+}
+
+.swatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 4px;
+  border-radius: var(--radius-small);
+  cursor: pointer;
+}
+
+.swatch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.swatch-chip {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--swatch);
+}
+
+.swatch-text {
+  padding: 0 8px;
+  font-size: var(--text-s);
+}
+
+.swatch:hover {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.swatch.is-checked {
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+.swatch:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* ---------- workspaces: how each window comes back ---------- */
+
+.ws-windows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.ws-windows legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-weight: 600;
+  font-size: var(--text-s);
+}
+
+.ws-window-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+
+.ws-window-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.ws-window-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-s);
+}
+
+.ws-window-fields {
+  display: flex;
+  flex: 1 1 180px;
+}
+
+.ws-window-fields input,
+.ws-window-fields select {
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-small);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-s);
+}
+
+.ws-window-fields input {
+  user-select: text;
+}
+
+.ws-window-fields input:hover,
+.ws-window-fields select:hover {
+  border-color: var(--ring-strong);
+}
+
+.save-form .check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font-size: var(--text-s);
+  font-weight: 400;
+}
+
+.check-row input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--brand);
+}
+
+/* ---------- voice input (bottom bar, next to the quick-launch buttons) ---------- */
+
+.launch-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.launch-row .launch-bar {
+  flex: 1 1 420px;
+}
+
+.voice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px 0 0;
+  min-width: 0;
+}
+
+.voice-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.voice-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 80ms linear;
+}
+
+/* Listening is unmistakable: a red dot that grows with the voice, and a red ring. */
+.voice-button.is-listening {
+  box-shadow: inset 0 0 0 2px var(--danger);
+}
+
+.voice-button.is-listening .voice-dot {
+  background: var(--danger);
+}
+
+.voice-button.is-recognizing .voice-dot {
+  background: var(--working);
+}
+
+.voice-settings {
+  width: 32px;
+  height: 32px;
+}
+
+.voice-message {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+
+.plain-select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-small);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.plain-select:hover {
+  border-color: var(--ring-strong);
+}
+
+.key-capture {
+  justify-content: center;
+  min-width: 120px;
+  min-height: 32px;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+}
+
+.key-capture[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}

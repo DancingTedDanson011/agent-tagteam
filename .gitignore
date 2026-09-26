@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+*.log
+.vitest/
+# local work notes of the development tooling, never published
+.code-guardian*
+.task-journal.md
+.audit-log.md
