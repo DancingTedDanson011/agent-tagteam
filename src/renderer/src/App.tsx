@@ -2,6 +2,7 @@
 // logic is unit-tested in model.ts/workspaces.ts, the wiring by the in-app selftest end to end.
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import type { Lang, SlotLaunch, ViewMode, Workspace } from '../../shared/types'
+import type { CockpitSnapshot } from '../../shared/cockpit'
 import { Dock } from './components/Dock'
 import { EmptyState } from './components/EmptyState'
 import { Icon } from './components/Icon'
@@ -21,15 +22,18 @@ import { FocusView } from './views/FocusView'
 import { FreeView } from './views/FreeView'
 import { GridView } from './views/GridView'
 import { TabsView } from './views/TabsView'
+import { CockpitView } from './views/CockpitView'
 import { assignSlots, missingSlots, workspaceFromState } from './workspaces'
 
 const NOTICE_MS = 9000
-const VIEW_KEYS: Record<string, ViewMode> = { '1': 'focus', '2': 'grid', '3': 'free', '4': 'tabs' }
+const VIEW_KEYS: Record<string, ViewMode> = { '1': 'focus', '2': 'grid', '3': 'free', '4': 'tabs', '5': 'cockpit' }
 
 export function App() {
   const [st, dispatch] = useReducer(reduce, undefined, initialState)
   const [lang, setLang] = useState<Lang>('de')
   const [styleId, setStyleId] = useState<string | null>(null)
+  const [cockpit, setCockpit] = useState<CockpitSnapshot | null>(null)
+  const [cockpitError, setCockpitError] = useState<string | null>(null)
   /** A workspace restore in progress or just finished (the notice slot shows it). */
   const [restore, setRestore] = useState<{ running: boolean; done: number; total: number; failed: number; home: number } | null>(null)
   const t = DICTS[lang]
@@ -54,6 +58,20 @@ export function App() {
 
   // Terminals of agent tiles that are gone are released.
   useEffect(() => syncListed(new Set(st.sessions.filter((s) => s.agent).map((s) => s.id))), [st.sessions])
+
+  useEffect(() => {
+    let active = true
+    const accept = (snapshot: CockpitSnapshot) => {
+      if (!active) return
+      setCockpit((previous) => previous && previous.at > snapshot.at ? previous : snapshot)
+      setCockpitError(null)
+    }
+    const off = window.organizer.onCockpit(accept)
+    void window.organizer.loadCockpit().then(accept).catch((cause: unknown) => {
+      if (active) setCockpitError(cause instanceof Error ? cause.message : String(cause))
+    })
+    return () => { active = false; off() }
+  }, [])
 
   useEffect(() => {
     if (!restore || restore.running) return
@@ -211,7 +229,24 @@ export function App() {
       </div>
 
       <main className="stage">
-        {st.order.length === 0 ? (
+        {st.view === 'cockpit' ? (
+          <CockpitView snapshot={cockpit} error={cockpitError} lang={lang}
+            onCommand={async (command) => {
+              const result = await window.organizer.cockpitCommand(command)
+              if (result.ok) {
+                try { setCockpit(await window.organizer.loadCockpit()); setCockpitError(null) }
+                catch (cause) { setCockpitError(cause instanceof Error ? cause.message : String(cause)) }
+              }
+              return result
+            }}
+            onOpenSession={(id) => {
+              if (!st.order.includes(id)) { setCockpitError(t.cockpit.notInOrganizer); return }
+              dispatch({ type: 'view', view: 'focus' })
+              focus(id)
+            }}
+            onPickFolder={() => window.organizer.pickFolder()}
+            onCopy={(text) => window.organizer.clipboardWrite(text)} />
+        ) : st.order.length === 0 ? (
           <EmptyState onPicker={openPicker} />
         ) : st.view === 'focus' ? (
           <FocusView

@@ -11,7 +11,7 @@ import { parseAgentId, parseAgentStart, parseTerminalSize } from '../../shared/v
 import { systemDirectory } from '../win32/launch'
 import { AgentActivity } from './activity'
 import { AgentManager, type StartResult } from './agents'
-import { AuditLog, McpHandler } from './mcp'
+import { AuditLog, McpHandler, type CockpitMcpBridge } from './mcp'
 import { autoTrust, isTrustDialogFor, trustKeys } from './trust'
 import { McpPipe } from './pipe'
 import { findOnPath, resolveProgram } from './programs'
@@ -27,6 +27,8 @@ const TRUST_USER_QUIET_MS = 1500 // same pause as an orchestrator's send
 
 export type AgentWiring = {
   infos(): SessionInfo[]
+  processes(): Array<{ id: string; pid: number }>
+  setCockpit(bridge: CockpitMcpBridge): void
   /** One activity pass; true when a tile's activity or badge changed. */
   tick(attended: string[]): boolean
   clearBadge(id: string): void
@@ -222,6 +224,8 @@ export async function wireAgents(
   })
 
   return {
+    processes: () => agents.list().filter(a => !a.exited).map(a => ({ id: a.id, pid: a.pty.pid })),
+    setCockpit: (bridge) => handler.setCockpit(bridge),
     infos: () =>
       agents.list().map((a) => ({
         id: a.id,

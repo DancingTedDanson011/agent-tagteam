@@ -5,6 +5,7 @@
 // audited with secrets masked. Idle and input rules follow Marco's bridge (wait-for.ts, inject.ts).
 import { appendFileSync, renameSync, statSync } from 'node:fs'
 import type { AgentProvider } from '../../shared/types'
+import type { CockpitResult } from '../../shared/cockpit'
 import { normalizeFolder } from '../../shared/folder'
 import { startsLikeFlag } from '../../shared/validate'
 import { parseTitleHint } from '../activity/activity'
@@ -17,17 +18,35 @@ const WORKER_PROVIDERS: readonly AgentProvider[] = ['claude', 'codex', 'opencode
 
 // ---------- secrets and audit ----------
 
+const CREDENTIAL_NAME = /password|passwd|secret|token|api[_-]?key|authorization|cookie|credential/i
+function maskEncodedJsonCredentials(value: string): string {
+  for (const match of value.matchAll(/\\"((?:\\+u[0-9a-f]{4}|[A-Za-z0-9_.-])+)\\"\s*:/gi)) {
+    const key = match[1].replace(/\\+u([0-9a-f]{4})/gi, (_part, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
+    if (CREDENTIAL_NAME.test(key)) return value.slice(0, match.index) + '****'
+  }
+  return value
+}
 const SECRETS: RegExp[] = [
   /\bsk-[A-Za-z0-9_-]{12,}/g, // OpenAI / Anthropic style keys
   /\bgh[pousr]_[A-Za-z0-9]{20,}/g, // GitHub tokens
   /\bAKIA[0-9A-Z]{16}\b/g, // AWS access key ids
   /\bxox[abprs]-[A-Za-z0-9-]{10,}/g, // Slack tokens
   /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{6,}/gi,
-  /\b(password|passwd|secret|token|api[_-]?key)\s*[=:]\s*\S+/gi
+  /(?<![A-Za-z0-9_.-])["']?(?=[A-Za-z0-9_.-]+["']?\s*[=:])[A-Za-z0-9_.-]*(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential)[A-Za-z0-9_.-]*["']?\s*[=:]\s*(?:"(?:\\[\s\S]|[^"\\])*(?:"|\\?$)|'(?:\\[\s\S]|[^'\\])*(?:'|\\?$)|[^\r\n]*)/gi,
+  /\b(?:Authorization|Cookie|Set-Cookie)\s*:\s*[^\r\n'"]+/gi,
+  /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{12,}/g,
+  /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z ]+ )?PRIVATE KEY-----|$)/g
 ]
 
 export function redact(text: string): string {
-  return SECRETS.reduce((t, re) => t.replace(re, '****'), text)
+  // Decode only sensitive JSON keys for masking; executable/source input is never normalized.
+  const normalized = maskEncodedJsonCredentials(text).replace(/"((?:\\.|[^"\\])*)"\s*:/g, (match, encoded: string) => {
+    try {
+      const key = JSON.parse('"' + encoded + '"') as string
+      return CREDENTIAL_NAME.test(key) ? '"secret":' : match
+    } catch { return match }
+  })
+  return SECRETS.reduce((t, re) => t.replace(re, '****'), normalized)
 }
 
 /** Append-only JSON lines, rotated at `maxBytes` (bridge's MCP log grew to 244.5 MB without it). */
@@ -79,6 +98,16 @@ const KEYS: Record<string, string> = {
 
 const id = { type: 'string', description: 'Tile id from list_sessions, e.g. "a3".' }
 const TOOLS = [
+  {
+    name: 'list_contracts',
+    description: 'Read the project contracts and their actual check results in your own starting folder. Drafts cannot execute. Only the user can freeze contracts or approve manual criteria in the cockpit.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false }
+  },
+  {
+    name: 'run_contract_check',
+    description: 'Run an owner-frozen, unchanged contract check in your own project. Omit criterion_id to run its automated checks. This cannot freeze contracts or approve manual criteria. Never claim completion without its executed result.',
+    inputSchema: { type: 'object', properties: { contract_id: { type: 'string' }, criterion_id: { type: 'string' } }, required: ['contract_id'], additionalProperties: false }
+  },
   {
     name: 'list_sessions',
     description:
@@ -135,6 +164,10 @@ class ToolError extends Error {}
 
 /** What the orchestrator may know beyond the tiles: the user's home (for "~") and captured windows by name. */
 export type McpWorld = { home: string; captured: () => Array<{ title: string; program: string }> }
+export type CockpitMcpBridge = {
+  listContracts(cwd: string): Promise<unknown>
+  runCheck(cwd: string, contractId: string, criterionId?: string): Promise<CockpitResult>
+}
 
 export type McpTiming = { userIdleMs: number; pollMs: number; enterDelayMs: number; userIdleCapMs?: number }
 const DEFAULT_TIMING: McpTiming = { userIdleMs: 1500, pollMs: 250, enterDelayMs: 60, userIdleCapMs: 10_000 }
@@ -148,6 +181,9 @@ const str = (v: unknown, name: string, max: number): string => {
 
 export class McpHandler {
   private readonly timing: McpTiming
+  private cockpit: CockpitMcpBridge | null = null
+
+  setCockpit(bridge: CockpitMcpBridge): void { this.cockpit = bridge }
 
   constructor(
     private readonly agents: AgentManager,
@@ -186,6 +222,24 @@ export class McpHandler {
       const self = this.agents.get(orch)
       if (!self || !hasOrganizerTools(self.provider, self.role) || self.exited) throw new ToolError('only an AI tile the user started may use these tools')
       switch (name) {
+        case 'list_contracts':
+        case 'run_contract_check': {
+          if (!this.cockpit) throw new ToolError('The project cockpit is not available yet')
+          const allowed = name === 'list_contracts' ? [] : ['contract_id', 'criterion_id']
+          if (Object.keys(args).some(key => !allowed.includes(key))) throw new ToolError('Unexpected cockpit argument; the caller folder cannot be overridden')
+          try {
+            if (name === 'list_contracts') return ok(await this.cockpit.listContracts(self.cwd))
+            const contractId = str(args.contract_id, 'contract_id', 200)
+            if (!/^C-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(contractId)) throw new ToolError('Invalid contract_id')
+            const criterionId = args.criterion_id === undefined ? undefined : str(args.criterion_id, 'criterion_id', 100)
+            if (criterionId !== undefined && !/^AC[0-9]+$/.test(criterionId)) throw new ToolError('Invalid criterion_id')
+            const result = await this.cockpit.runCheck(self.cwd, contractId, criterionId)
+            this.audit.write({ orch, tool: name, cwd: self.cwd, contractId, criterionId, ok: result.ok })
+            return result.ok ? ok(result) : { content: [{ type: 'text', text: redact(result.error) }], isError: true }
+          } catch (error) {
+            throw new ToolError(redact(error instanceof Error ? error.message : String(error)).slice(0, 4000))
+          }
+        }
         case 'list_sessions':
           // Everything, marked: an empty list left the orchestrator unable to tell the user what to do.
           return ok({

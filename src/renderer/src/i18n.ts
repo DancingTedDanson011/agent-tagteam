@@ -2,9 +2,11 @@
 import { createContext, useContext } from 'react'
 import type { Activity, AgentProvider, ColorId, Lang, RefusalReason, ViewMode } from '../../shared/types'
 import type { VoiceLang, VoiceModel } from '../../shared/voice'
+import { cockpitDe, cockpitEn } from './cockpit-i18n'
 
 export const de = {
-  view: { focus: 'Fokus', grid: 'Raster', free: 'Frei', tabs: 'Tabs' } satisfies Record<ViewMode, string>,
+  cockpit: cockpitDe,
+  view: { focus: 'Fokus', grid: 'Raster', free: 'Frei', tabs: 'Tabs', cockpit: 'Cockpit' } satisfies Record<ViewMode, string>,
   viewSwitch: 'Ansicht',
   viewTitle: (label: string, key: string) => `${label} (Strg+${key}) — setzt herausgezogene Terminals zurück`,
   language: 'Sprache',
@@ -179,7 +181,8 @@ export const de = {
 export type Dict = typeof de
 
 export const en: Dict = {
-  view: { focus: 'Focus', grid: 'Grid', free: 'Free', tabs: 'Tabs' },
+  cockpit: cockpitEn,
+  view: { focus: 'Focus', grid: 'Grid', free: 'Free', tabs: 'Tabs', cockpit: 'Cockpit' },
   viewSwitch: 'View',
   viewTitle: (label, key) => `${label} (Ctrl+${key}) — puts dragged-out terminals back`,
   language: 'Language',

@@ -182,6 +182,8 @@ export function roles(st: UiState): Roles {
   const docked = st.order.filter((id) => st.minimized.includes(id))
   if (st.modal) return { live: [], thumb: [], parked: [...st.order], attended: [] }
   switch (st.view) {
+    case 'cockpit':
+      return { live: [], thumb: [], parked: [...st.order], attended: [] }
     case 'free':
     case 'grid':
       return { live: visible, thumb: [], parked: docked, attended: [] }

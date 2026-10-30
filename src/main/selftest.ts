@@ -20,6 +20,7 @@ import * as ax from './win32/async'
 import type { HWND } from './win32/api'
 import { processCwd } from './win32/process-cwd'
 import * as win from './win32/windows'
+import { cockpitChecks } from './cockpit/selftest'
 
 export type SelftestContext = {
   window: BrowserWindow
@@ -31,6 +32,7 @@ export type SelftestContext = {
   journal: Journal
   journalPath: string
   workspacesPath: string
+  settingsPath: string
 }
 
 type Check = { name: string; ok: boolean; detail: string }
@@ -102,6 +104,7 @@ export async function runSelftest(ctx: SelftestContext, hold = false, foreign: s
       return true
     })()`)
 
+  if (!hold) await cockpitChecks(ctx, check)
   const conhost = await spawnWindow('conhost', 'echo CLIO-SELFTEST-A')
   const terminal = await spawnWindow('wt', 'echo CLIO-SELFTEST-B')
   const originals = [conhost, terminal].map((h) => ({
@@ -152,7 +155,7 @@ export async function runSelftest(ctx: SelftestContext, hold = false, foreign: s
 
   await measure('focus')
   // 1b. language: EN switches every label, DE switches back; a test run never writes the user's settings
-  const settingsFile = join(dirname(ctx.journalPath), 'settings.json')
+  const settingsFile = ctx.settingsPath
   const settingsBefore = existsSync(settingsFile) ? readFileSync(settingsFile, 'utf8') : null
   const labels = () =>
     js<{ lang: string; capture: string; focus: string }>(`({
@@ -170,7 +173,7 @@ export async function runSelftest(ctx: SelftestContext, hold = false, foreign: s
   await sleep(300)
   check('DE switches back', (await labels()).capture === 'Terminal einfangen')
   const settingsAfter = existsSync(settingsFile) ? readFileSync(settingsFile, 'utf8') : null
-  check("a test run leaves the user's language setting alone", settingsAfter === settingsBefore, JSON.stringify({ settingsBefore, settingsAfter }))
+  check("a test run leaves the user's language setting alone", settingsAfter === settingsBefore)
 
   // 2. focus view: the big session is live over its slot, the other is a thumbnail parked below the app
   const tiles = await js<number>(`document.querySelectorAll('.tile .tile-body').length`)
@@ -543,8 +546,8 @@ async function agentChecks(
   js: Js,
   clickText: (selector: string, text: string) => Promise<boolean>
 ): Promise<void> {
-  // The long path: tmpdir() may be an 8.3 short name (DANCIN~1), shells print the long one.
-  const cwd = realpathSync.native(tmpdir())
+  // CLI startup and MCP checks share only this test-owned project, never the user's temp root.
+  const cwd = realpathSync.native(mkdtempSync(join(tmpdir(), 'clio-agent-')))
 
   // Every installed AI CLI really starts and stays up (no message is sent: no model call). Codex once
   // failed with "spawn-failed" because its npm shim was misread (2026-09-24).
@@ -794,7 +797,22 @@ async function agentChecks(
   try {
     await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'selftest', version: '1' } })
     const list = await rpc('tools/list')
-    check('MCP via shim: tools listed', (list?.result?.tools?.length ?? 0) === 9, JSON.stringify(list?.result?.tools?.length))
+    const toolNames = (list?.result?.tools ?? []).map(value => (value as { name?: string }).name)
+    check('MCP via shim: tools listed', ['read_screen', 'spawn_worker', 'send', 'wait_for', 'read_tail', 'stop_worker', 'list_contracts', 'run_contract_check'].every(name => toolNames.includes(name)), JSON.stringify(toolNames))
+    const projectAdded = await js<{ ok: boolean }>(`window.organizer.cockpitCommand({ type: 'add-project', root: ${JSON.stringify(cwd)} })`)
+    check('MCP via shim: calling folder registered as a cockpit project', projectAdded.ok)
+    const contracts = await tool('list_contracts', {})
+    check('MCP via shim: own-folder contracts available', !contracts.error, contracts.text)
+    const project = (await js<import('../shared/cockpit').CockpitSnapshot>('window.organizer.loadCockpit()')).projects.find(item => item.root.toLowerCase() === cwd.toLowerCase())
+    if (!project) throw new Error('MCP fixture project missing')
+    const created = await js<{ ok: boolean }>(`window.organizer.cockpitCommand(${JSON.stringify({ type: 'create-contract', projectId: project.id, title: 'MCP check fixture', objective: 'Prove the real MCP-to-runner path', maxSessions: 2, maxHours: 1, command: 'echo CLIO-MCP-CHECK' })})`)
+    if (!created.ok) throw new Error('MCP fixture contract missing')
+    const contract = (await js<import('../shared/cockpit').CockpitSnapshot>('window.organizer.loadCockpit()')).projects.find(item => item.id === project.id)!.contracts[0]
+    const frozen = await js<{ ok: boolean }>(`window.organizer.cockpitCommand(${JSON.stringify({ type: 'freeze-contract', projectId: project.id, contractId: contract.id, approvedBy: 'Selftest fixture', expectedDefinitionHash: contract.definitionHash })})`)
+    if (!frozen.ok) throw new Error('MCP fixture freeze failed')
+    const checked = await tool('run_contract_check', { contract_id: contract.id })
+    const proof = (await js<import('../shared/cockpit').CockpitSnapshot>('window.organizer.loadCockpit()')).projects.find(item => item.id === project.id)!.contracts.find(item => item.id === contract.id)!
+    check('MCP via shim: actual frozen check executes and persists without manual approval', !checked.error && proof.runs[0]?.passed === true && proof.runs[0].stdout.includes('CLIO-MCP-CHECK') && !proof.fulfilled && proof.manualApprovals.length === 0, checked.text)
     const denied = await tool('read_screen', { id: aid })
     check("MCP: reading the user's tile is refused until it is unlocked", denied.error && /not allowed/.test(denied.text), denied.text)
     const spawned = await tool('spawn_worker', { provider: 'cmd', cwd })
@@ -826,9 +844,9 @@ async function agentChecks(
             return !/Yes, I trust this folder/.test(t) && /Claude Code v/.test(t)
           }, 20000)
         : false
-      const auditFile = join(app.getPath('userData'), 'agent-audit.log')
+      const auditFile = join(dirname(ctx.journalPath), 'agent-audit.log')
       const logged = !!cid && existsSync(auditFile) && readFileSync(auditFile, 'utf8').split('\n').some((l) => l.includes('"auto-trust"') && l.includes(`"tile":"${cid}"`))
-      check('Claude worker in its own folder: the organizer answers the trust question', asked && answered && logged, JSON.stringify({ asked, answered, logged, tail: cid ? ctx.agents.tail(cid, 6) : cw.text }))
+      check('Claude worker in its own folder: the organizer answers the trust question', asked && answered && logged, JSON.stringify({ asked, answered, logged, tail: cid ? ctx.agents.tail(cid, 60) : cw.text }))
       if (cid) await tool('stop_worker', { id: cid })
       await sleep(1500)
       try {

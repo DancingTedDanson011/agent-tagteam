@@ -1,9 +1,10 @@
 // Restore journal: the original state of every captured window, written to disk BEFORE the
 // window is modified. The watchdog and the next app start read it after a crash.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { parseJournalEntry } from '../../shared/validate'
 import type { WindowPlacement } from '../win32/api'
+import { atomicWrite } from '../fsutil'
 
 export type JournalEntry = {
   hwnd: string
@@ -56,9 +57,7 @@ export class Journal {
 
   private flush(): void {
     mkdirSync(dirname(this.file), { recursive: true })
-    const tmp = this.file + '.tmp'
     const data: JournalFile = { version: 1, entries: this.list }
-    writeFileSync(tmp, JSON.stringify(data, null, 1))
-    renameSync(tmp, this.file)
+    atomicWrite(this.file, JSON.stringify(data, null, 1))
   }
 }

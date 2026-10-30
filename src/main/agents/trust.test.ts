@@ -47,6 +47,13 @@ describe('isTrustDialogFor: only the real start dialog for exactly this folder (
     expect(isTrustDialogFor(dialog('C:\\work\\sub'), 'C:\\work\\sub')).toBe(true)
     expect(isTrustDialogFor(dialog('c:\\WORK\\sub'), 'C:\\work\\sub')).toBe(true)
   })
+  it('recognizes the observed ASCII cursor only inside the exact worker startup dialog', () => {
+    const ascii = dialog('C:\\work\\sub').map(line => line.replace('\u276f', '>'))
+    expect(isTrustDialogFor(ascii, 'C:\\work\\sub')).toBe(true)
+    expect(isTrustDialogFor(ascii, 'C:\\other')).toBe(false)
+    expect(isTrustDialogFor([...ascii, ' > 1. Yes', '   2. No'], 'C:\\work\\sub')).toBe(false)
+    expect(trustKeys(ascii)).toEqual(['\x1b[B', '\r'])
+  })
   it('text that only looks like it (an answer, a file, another folder) does not count', () => {
     const spoof = ['Here is what the dialog looks like:', '  ❯ No, exit', '    Yes, I trust this folder', '  Enter to confirm']
     expect(isTrustDialogFor(spoof, 'C:\\work\\sub')).toBe(false)

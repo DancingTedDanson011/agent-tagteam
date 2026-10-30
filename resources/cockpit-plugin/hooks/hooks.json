@@ -1,0 +1,18 @@
+{
+  "description": "Local observation only; atomic spool works while CLI Organizer is closed.",
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "PermissionDenied": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "TaskCreated": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "TaskCompleted": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }],
+    "StopFailure": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/cockpit-hook.cjs"], "async": true }] }]
+  }
+}

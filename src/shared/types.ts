@@ -1,9 +1,10 @@
 // Types shared between main, preload and renderer. Plain data only (structured-clone safe).
 import type { VoiceResult, VoiceSettings } from './voice'
+import type { CockpitCommand, CockpitResult, CockpitSnapshot } from './cockpit'
 
 export type Lang = 'de' | 'en'
 
-export type ViewMode = 'free' | 'grid' | 'focus' | 'tabs'
+export type ViewMode = 'free' | 'grid' | 'focus' | 'tabs' | 'cockpit'
 
 export type Activity = 'idle' | 'working' | 'waiting'
 
@@ -89,6 +90,9 @@ export type Workspace = { id: string; name: string; view: ViewMode; slots: Works
 export type RestoreResult = { ok: true; id: string; homeFallback: boolean } | { ok: false; reason: 'failed' | 'timeout' | 'no-launch' }
 
 export type OrganizerApi = {
+  onCockpit(cb: (snapshot: CockpitSnapshot) => void): () => void
+  loadCockpit(): Promise<CockpitSnapshot>
+  cockpitCommand(command: CockpitCommand): Promise<CockpitResult>
   onSessions(cb: (sessions: SessionInfo[]) => void): () => void
   onDrag(cb: (state: DragState) => void): () => void
   onCaptured(cb: (id: string) => void): () => void

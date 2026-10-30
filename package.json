@@ -1,7 +1,7 @@
 {
   "name": "cli-organizer",
   "productName": "CLI Organizer",
-  "version": "0.5.0",
+  "version": "0.6.1",
   "description": "Pull running console windows into one organized workspace.",
   "author": "Marco Sadjadi",
   "license": "FSL-1.1-MIT",
@@ -65,6 +65,10 @@
       {
         "from": "resources/clio-whisper.py",
         "to": "clio-whisper.py"
+      },
+      {
+        "from": "resources/cockpit-plugin",
+        "to": "cockpit-plugin"
       }
     ],
     "win": {

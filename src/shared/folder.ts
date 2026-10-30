@@ -47,7 +47,7 @@ export function sanitizePaste(text: string): string {
 export function detectTrustPrompt(screenLines: string[]): boolean {
   const text = screenLines.join('\n')
   return (
-    /^\s*❯\s+(No, exit|Yes, I trust this folder)\s*$/m.test(text) &&
+    /^\s*[❯>]\s+(No, exit|Yes, I trust this folder)\s*$/m.test(text) &&
     /^\s*(Yes, I trust this folder|No, exit)\s*$/m.test(text) &&
     /Enter to confirm/.test(text)
   )

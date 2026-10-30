@@ -5,6 +5,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { OrganizerApi, SessionInfo, Workspace } from '../../shared/types'
 import { App } from './App'
+import { createCockpitPreview } from './cockpit-preview'
 import './styles.css'
 
 const sessions: SessionInfo[] = [
@@ -22,7 +23,11 @@ const agentText: Record<string, string> = {
 }
 let workspaces: Workspace[] = [{ id: 'w1', name: 'Vorschau-Workspace', view: 'grid', slots: [] }]
 
+const cockpitPreview = createCockpitPreview(new URLSearchParams(location.search))
 const mock: OrganizerApi = {
+  onCockpit: () => () => undefined,
+  loadCockpit: async () => cockpitPreview.load(),
+  cockpitCommand: cockpitPreview.command,
   onSessions: (cb) => {
     setTimeout(() => cb(new URLSearchParams(location.search).has('empty') ? [] : sessions), 0)
     return () => undefined
@@ -96,7 +101,7 @@ window.organizer = mock
 // ?lang=en  ?view=grid|free|tabs  ?dock=1  ?dialog=picker|workspaces  ?empty  ?notice — preview states for the design proof
 const params = new URLSearchParams(location.search)
 setTimeout(() => {
-  const key = { focus: '1', grid: '2', free: '3', tabs: '4' }[params.get('view') ?? '']
+  const key = { focus: '1', grid: '2', free: '3', tabs: '4', cockpit: '5' }[params.get('view') ?? '']
   if (key) window.dispatchEvent(new KeyboardEvent('keydown', { key, ctrlKey: true }))
   setTimeout(() => {
     if (params.has('dock')) document.querySelector<HTMLButtonElement>('.tile .session-actions button')?.click()

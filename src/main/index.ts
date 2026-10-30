@@ -1,12 +1,18 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, watch, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, statSync, watch } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { resolveLang } from '../shared/lang'
 import type { CaptureCandidate, CaptureResult, Lang, SessionInfo } from '../shared/types'
 import { parseAgentId, parseId, parseIdList, parseLang, parseLayout, parseSessionId, parseWorkspaces } from '../shared/validate'
 import { ActivityMonitor } from './activity/monitor'
 import { wireAgents } from './agents/wire'
+import { atomicWrite } from './fsutil'
+import { wireCockpit } from './cockpit/wire'
+import { materializeCockpitPlugin } from './cockpit/plugin'
+import { capturedWindowProcesses } from './cockpit/mapping'
+import { parentPid } from './win32/process-cwd'
+import { findOnPath } from './agents/programs'
 import { DragWatcher } from './capture/dragwatch'
 import { claimedByOtherInstances, instanceJournalPath, journalsOfDeadInstances, type Liveness } from './capture/instances'
 import { awaitRelease, claimKind, clearHandover, handoversFor, requestHandover } from './capture/handover'
@@ -101,22 +107,18 @@ function spawnWatchdog(journalPath: string, logPath: string): void {
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-function atomicWrite(file: string, data: string): void {
-  const tmp = file + '.tmp'
-  writeFileSync(tmp, data)
-  renameSync(tmp, file)
-}
-
 async function start(): Promise<void> {
   const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3)
-  const dataDir = app.getPath('userData')
+  const testRun = !!(arg('selftest') || arg('selftest-hold'))
+  const requestedTestDirectory = arg('selftest-data-dir')
+  if (testRun && requestedTestDirectory && !isAbsolute(requestedTestDirectory)) throw new Error('Selftest data directory must be absolute')
+  const dataDir = testRun ? requestedTestDirectory ?? join(tmpdir(), `clio-selftest-data-${process.pid}`) : app.getPath('userData')
   mkdirSync(dataDir, { recursive: true })
   const selfStart = win.processStartTime(process.pid) ?? String(Date.now())
   const journalPath = instanceJournalPath(dataDir, process.pid, selfStart)
-  const testRun = !!(arg('selftest') || arg('selftest-hold'))
   // A selftest saves workspaces too: never into the user's file.
   const workspacesPath = testRun ? join(tmpdir(), `clio-selftest-workspaces-${process.pid}.json`) : join(dataDir, 'workspaces.json')
-  const settingsPath = join(dataDir, 'settings.json')
+  const settingsPath = join(testRun ? app.getPath('userData') : dataDir, 'settings.json')
   const journal = new Journal(journalPath)
 
   // Windows that crashed instances left behind come back first — only from instances that are no
@@ -191,6 +193,36 @@ async function start(): Promise<void> {
   const agents = await wireAgents(window, dataDir, () => push(), () =>
     sessions.list().map((s) => ({ title: s.title, program: s.processName }))
   )
+  const verifiedParent = (pid: number): number | null => {
+    const parent = parentPid(pid)
+    if (!parent || parent === pid) return null
+    const childStart = win.processStartTime(pid)
+    const parentStart = win.processStartTime(parent)
+    return childStart && parentStart && BigInt(parentStart) <= BigInt(childStart) ? parent : null
+  }
+  let cockpitPluginPath: string | undefined
+  try {
+    const bundledPlugin = app.isPackaged ? join(process.resourcesPath, 'cockpit-plugin') : join(app.getAppPath(), 'resources', 'cockpit-plugin')
+    cockpitPluginPath = materializeCockpitPlugin(bundledPlugin, dataDir)
+  } catch (error) {
+    console.warn('CLI Organizer optional cockpit plugin unavailable:', error instanceof Error ? error.message : String(error))
+  }
+  const cockpit = wireCockpit(window, dataDir, {
+    home: testRun ? join(dataDir, 'home') : homedir(),
+    pluginPath: cockpitPluginPath,
+    runner: { shellPath: join(systemDirectory(), 'cmd.exe'), gitPath: findOnPath('git.exe', process.env.PATH ?? '') },
+    getTiles: () => [...agents.processes(), ...capturedWindowProcesses(sessions.list().map(s => ({ id: s.id, pid: win.getPid(s.hwnd), className: s.className })), verifiedParent, [process.pid])],
+    parentPid: verifiedParent,
+    isProcessAlive: (pid, token) => {
+      const actual = win.processStartTime(pid)
+      if (actual === null) {
+        try { process.kill(pid, 0); return null } catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH' ? false : null }
+      }
+      if (!token || !/^\d+$/.test(token) || token.length !== actual.length) return null
+      return actual === token
+    }
+  })
+  agents.setCockpit(cockpit.mcp)
   // Names and colours of sessions, and workspaces that start their missing windows again.
   restore = wireRestore({
     captured: (id) => sessions.get(id),
@@ -279,6 +311,7 @@ async function start(): Promise<void> {
   })
 
   const tick = setInterval(() => {
+    void cockpit.tick()
     sessions.refresh()
     serveHandovers() // fallback when the folder watch missed a request
     // A dialog must stay on top: a captured window that came to the front goes back behind the app.
@@ -300,7 +333,7 @@ async function start(): Promise<void> {
   window.on('restore', () => placer.showAll())
 
   // ---- IPC (every payload is validated; the page is not trusted with raw handles) ----
-  ipcMain.on('ready', () => push())
+  ipcMain.on('ready', () => { push(); cockpit.push() })
   ipcMain.on('layout', (_e, raw) => {
     const layout = parseLayout(raw)
     if (!layout) return
@@ -427,6 +460,7 @@ async function start(): Promise<void> {
     drag.stop()
     clearInterval(tick)
     handoverWatch?.close()
+    await Promise.race([cockpit.close(), delay(SHUTDOWN_TIMEOUT_MS)])
     agents.stopAll() // started agents end with the app (captured windows keep running)
     voice.stop()
     agents.close()
@@ -481,7 +515,7 @@ async function start(): Promise<void> {
   const holdOut = arg('selftest-hold')
   if (selftestOut || holdOut) {
     const foreign = arg('selftest-foreign') ?? null // a window another instance holds (two-instance e2e)
-    const report = await runSelftest({ window, sessions, placer, thumbs, agents, monitor, journal, journalPath, workspacesPath }, !!holdOut, foreign)
+    const report = await runSelftest({ window, sessions, placer, thumbs, agents, monitor, journal, journalPath, workspacesPath, settingsPath }, !!holdOut, foreign)
     atomicWrite((selftestOut ?? holdOut)!, JSON.stringify(report, null, 2))
     if (selftestOut) window.close()
   }

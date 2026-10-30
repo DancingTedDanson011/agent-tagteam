@@ -9,6 +9,9 @@ function listen<T>(channel: string, cb: (value: T) => void): () => void {
 }
 
 const api: OrganizerApi = {
+  onCockpit: (cb) => listen('cockpit', cb),
+  loadCockpit: () => ipcRenderer.invoke('cockpit:load'),
+  cockpitCommand: (command) => ipcRenderer.invoke('cockpit:command', command),
   onSessions: (cb) => listen('sessions', cb),
   onDrag: (cb) => listen('drag', cb),
   onCaptured: (cb) => listen('captured', cb),

@@ -1,7 +1,7 @@
 // Drives the real app binary. APP_EXE selects it: the packaged exe, or (default) the dev Electron
 // with this project. Checks what happens to captured windows AFTER the app is gone.
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
@@ -12,6 +12,9 @@ const ROOT = resolve(__dirname, '../..')
 const exe = process.env.APP_EXE ?? join(ROOT, 'node_modules/electron/dist/electron.exe')
 // --lang=de: the selftest clicks German labels, whatever language this machine would pick
 const baseArgs = [...(process.env.APP_EXE ? [] : [ROOT]), '--lang=de']
+// Keep installed CLI executables stable while exercising them; no global setting is changed.
+// https://code.claude.com/docs/en/env-vars#disable-autoupdater
+const testEnv = { ...process.env, DISABLE_AUTOUPDATER: '1' }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 type Report = {
@@ -61,20 +64,27 @@ function expectRestored(r: Report): void {
 
 it('selftest passes and every window is back after a normal close', async () => {
   const out = join(mkdtempSync(join(tmpdir(), 'clio-e2e-')), 'report.json')
-  const child = spawn(exe, [...baseArgs, `--selftest=${out}`], { stdio: 'ignore' })
+  const data = mkdtempSync(join(tmpdir(), 'cg-clio-e2e-data-'))
+  const child = spawn(exe, [...baseArgs, `--selftest=${out}`, `--selftest-data-dir=${data}`], { stdio: 'ignore', env: testEnv })
   const code = await new Promise<number | null>((res) => child.on('exit', res))
   const report = readReport(out)
   expect(report, 'report written').not.toBeNull()
   const failed = report!.checks.filter((c) => !c.ok)
   expect(failed, JSON.stringify(failed, null, 1)).toEqual([])
   expect(code).toBe(0)
+  expect(existsSync(join(data, 'cockpit-plugin', 'cockpit-hook.cjs')), 'optional hook survives closing the portable app').toBe(true)
   await sleep(500)
   expectRestored(report!)
+  const proofDirectory = join(ROOT, '.code-guardian-evidence', 'e2e-proof')
+  mkdirSync(proofDirectory, { recursive: true })
+  writeFileSync(join(proofDirectory, 'native.json'), JSON.stringify({ executable: exe, report: out, data,
+    screenshot: join(data, 'cockpit-electron.png'), at: new Date().toISOString() }, null, 2))
 }, 180000)
 
 it('a hard kill of the app: the watchdog restores every captured window', async () => {
   const out = join(mkdtempSync(join(tmpdir(), 'clio-e2e-')), 'report.json')
-  const child = spawn(exe, [...baseArgs, `--selftest-hold=${out}`], { stdio: 'ignore' })
+  const data = mkdtempSync(join(tmpdir(), 'cg-clio-e2e-data-'))
+  const child = spawn(exe, [...baseArgs, `--selftest-hold=${out}`, `--selftest-data-dir=${data}`], { stdio: 'ignore', env: testEnv })
   const report = await waitFor(() => readReport(out), 90000)
   expect(report.checks.every((c) => c.ok), JSON.stringify(report.checks)).toBe(true)
   for (const orig of report.windows) {
@@ -90,13 +100,14 @@ it('a hard kill of the app: the watchdog restores every captured window', async 
 
 it('two instances: B takes a window over from A; a crash of either restores exactly what it holds', async () => {
   const outA = join(mkdtempSync(join(tmpdir(), 'clio-e2e-')), 'a.json')
-  const childA = spawn(exe, [...baseArgs, `--selftest-hold=${outA}`], { stdio: 'ignore' })
+  const data = mkdtempSync(join(tmpdir(), 'cg-clio-e2e-data-'))
+  const childA = spawn(exe, [...baseArgs, `--selftest-hold=${outA}`, `--selftest-data-dir=${data}`], { stdio: 'ignore', env: testEnv })
   const a = await waitFor(() => readReport(outA), 90000)
   expect(a.checks.every((c) => c.ok), JSON.stringify(a.checks)).toBe(true)
 
   // B starts while A lives, and is pointed at one of A's windows
   const outB = join(mkdtempSync(join(tmpdir(), 'clio-e2e-')), 'b.json')
-  const childB = spawn(exe, [...baseArgs, `--selftest-hold=${outB}`, `--selftest-foreign=${a.windows[0].hwnd}`], { stdio: 'ignore' })
+  const childB = spawn(exe, [...baseArgs, `--selftest-hold=${outB}`, `--selftest-foreign=${a.windows[0].hwnd}`, `--selftest-data-dir=${data}`], { stdio: 'ignore', env: testEnv })
   const b = await waitFor(() => readReport(outB), 90000)
   expect(b.checks.filter((c) => !c.ok), JSON.stringify(b.checks, null, 1)).toEqual([])
   expect(b.checks.map((c) => c.name)).toContain('foreign window is taken over')

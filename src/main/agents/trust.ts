@@ -29,7 +29,7 @@ export function isInsideFolder(child: string, parent: string): boolean {
  */
 export function isTrustDialogFor(lines: string[], folder: string): boolean {
   if (!detectTrustPrompt(lines)) return false
-  if (lines.some((l) => /^\s*❯\s+\d+\./.test(l))) return false
+  if (lines.some((l) => /^\s*[❯>]\s+\d+\./.test(l))) return false
   const at = lines.findIndex((l) => l.trim() === 'Accessing workspace:')
   const shown = lines.slice(at + 1).find((l) => l.trim() !== '')
   const want = normalizeFolder(folder, '')
@@ -51,8 +51,8 @@ export function autoTrust(worker: TrustWorker, parent: TrustParent | undefined):
  * preselected, one arrow down reaches "Yes". Null when the dialog is not recognizable.
  */
 export function trustKeys(lines: string[]): string[] | null {
-  const cursor = lines.findIndex((l) => /^\s*❯\s/.test(l))
-  const yes = lines.findIndex((l) => /^\s*(❯\s+)?Yes, I trust this folder\s*$/.test(l))
+  const cursor = lines.findIndex((l) => /^\s*[❯>]\s/.test(l))
+  const yes = lines.findIndex((l) => /^\s*([❯>]\s+)?Yes, I trust this folder\s*$/.test(l))
   if (cursor < 0 || yes < 0) return null
   const step = yes > cursor ? '\x1b[B' : '\x1b[A'
   return [...Array<string>(Math.abs(yes - cursor)).fill(step), '\r']

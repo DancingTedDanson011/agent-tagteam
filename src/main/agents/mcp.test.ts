@@ -54,6 +54,13 @@ const call = (h: McpHandler, orch: string, name: string, args: object = {}) =>
 const text = (r: Awaited<ReturnType<typeof call>>) => r.result.content[0].text
 
 describe('MCP protocol', () => {
+  it('masks complete quoted credential values and escaped JSON credential keys', () => {
+    const remainder = 'SYNTHETIC_REMAINDER'
+    expect(redact("export PASSWORD='SYNTHETIC_FIRST " + remainder + "'")).not.toContain(remainder)
+    const escaped = '{"api' + '\\u005f' + 'key":"SYNTHETIC_ESCAPED_VALUE"}'
+    expect(redact(escaped)).not.toContain('SYNTHETIC_ESCAPED_VALUE')
+    expect(redact('{"password":"SYNTHETIC_FIRST ' + remainder + '"}')).not.toContain(remainder)
+  })
   it('initialize, tools/list, ping; notifications get no answer', async () => {
     const { handler } = setup()
     const init = (await handler.handle('a1', { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })) as {
@@ -63,11 +70,37 @@ describe('MCP protocol', () => {
     expect(init.result.serverInfo.name).toBe('clio')
     const list = (await handler.handle('a1', { jsonrpc: '2.0', id: 2, method: 'tools/list' })) as { result: { tools: Array<{ name: string }> } }
     expect(list.result.tools.map((t) => t.name).sort()).toEqual(
-      ['list_sessions', 'read_screen', 'read_tail', 'send', 'send_keys', 'spawn_worker', 'stop_worker', 'wait_for', 'wait_for_idle'].sort()
+      ['list_sessions', 'list_contracts', 'run_contract_check', 'read_screen', 'read_tail', 'send', 'send_keys', 'spawn_worker', 'stop_worker', 'wait_for', 'wait_for_idle'].sort()
     )
     expect(await handler.handle('a1', { jsonrpc: '2.0', method: 'notifications/initialized' })).toBeNull()
     expect(await handler.handle('a1', { jsonrpc: '2.0', id: 3, method: 'ping' })).toEqual({ jsonrpc: '2.0', id: 3, result: {} })
     expect(await handler.handle('a1', { jsonrpc: '2.0', id: 4, method: 'nope' })).toMatchObject({ error: { code: -32601 } })
+  })
+})
+
+describe('cockpit checks through the authenticated tile bridge', () => {
+  it('binds contract operations to the caller folder and exposes no approval operation', async () => {
+    const { handler } = setup()
+    const seen: unknown[][] = []
+    const bridge = {
+      listContracts: async (cwd: string) => { seen.push(['list', cwd]); return [{ contractId: 'C-TEST' }] },
+      runCheck: async (cwd: string, contract: string, criterion?: string) => {
+        seen.push(['run', cwd, contract, criterion]); return { ok: true as const }
+      }
+    }
+    const wired = handler as McpHandler & { setCockpit(value: typeof bridge): void }
+    expect(wired.setCockpit).toBeTypeOf('function')
+    wired.setCockpit(bridge)
+    expect(JSON.parse(text(await call(handler, 'a2', 'list_contracts')))).toEqual([{ contractId: 'C-TEST' }])
+    expect((await call(handler, 'a2', 'run_contract_check', { contract_id: 'C-TEST', criterion_id: 'AC1' })).result.isError).toBeFalsy()
+    expect(seen).toEqual([['list', 'C:\\work'], ['run', 'C:\\work', 'C-TEST', 'AC1']])
+    for (const [name, args] of [
+      ['run_contract_check', { contract_id: 'C-TEST', cwd: 'C:\\other' }],
+      ['run_contract_check', { contract_id: '../escape' }],
+      ['freeze_contract', { contract_id: 'C-TEST' }],
+      ['approve_criterion', { contract_id: 'C-TEST', criterion_id: 'AC1' }]
+    ] as const) expect((await call(handler, 'a2', name, args)).result.isError).toBe(true)
+    expect(seen).toHaveLength(2)
   })
 })
 

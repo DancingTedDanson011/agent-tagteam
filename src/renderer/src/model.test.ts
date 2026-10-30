@@ -78,6 +78,13 @@ describe('session list updates', () => {
 })
 
 describe('roles per view', () => {
+  it('cockpit parks every native window, including docked sessions, without attending any terminal', () => {
+    let st = withSessions(['a', 'b', 'c'])
+    st = reduce(st, { type: 'minimize', id: 'b' })
+    st = reduce(st, { type: 'view', view: 'cockpit' })
+    expect(roles(st)).toEqual({ live: [], thumb: [], parked: ['a', 'b', 'c'], attended: [] })
+  })
+
   it('free and grid: every visible session is live, docked ones are parked', () => {
     let st = withSessions(['a', 'b', 'c'])
     st = reduce(st, { type: 'minimize', id: 'b' })

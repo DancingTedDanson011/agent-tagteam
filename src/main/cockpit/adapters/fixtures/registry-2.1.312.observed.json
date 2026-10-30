@@ -1,0 +1,27 @@
+﻿{
+    "provenance":  "Real local Claude registry captured during this implementation; identities, paths, names, messaging values and process-start digits anonymized; field names/types and version/status retained. No .key file was read.",
+    "captured_at":  "2026-10-30T00:14:02.9316192Z",
+    "record":  {
+                   "pid":  123,
+                   "sessionId":  "fixture-live-session",
+                   "cwd":  "C:\\fixture\\project",
+                   "startedAt":  1793199642804,
+                   "procStart":  "000000000000000000",
+                   "version":  "2.1.312",
+                   "peerProtocol":  0,
+                   "peerFeatures":  [
+                                        "[masked]",
+                                        "[masked]"
+                                    ],
+                   "kind":  "interactive",
+                   "entrypoint":  "cli",
+                   "pidDomain":  "[masked]",
+                   "messagingSocketPath":  "[masked]",
+                   "name":  "[masked]",
+                   "nameSource":  "[masked]",
+                   "nameSince":  0,
+                   "status":  "busy",
+                   "updatedAt":  1793315417368,
+                   "statusUpdatedAt":  1793315417368
+               }
+}

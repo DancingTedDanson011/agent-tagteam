@@ -2,10 +2,11 @@
 // shared data folder; the holder releases the window (its original comes back), then the taker
 // captures it the normal way — so the taker journals the real original, never the adopted state.
 // A request can make the holder do exactly one thing: release that window.
-import { readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Journal } from './journal'
 import { listJournals } from './instances'
+import { atomicWrite } from '../fsutil'
 
 const REQUEST = /^handover-(\d{1,20})\.json$/
 
@@ -15,8 +16,7 @@ const requestPath = (dataDir: string, hwnd: string) => join(dataDir, `handover-$
 
 export function requestHandover(dataDir: string, hwnd: string, from: Requester): void {
   const file = requestPath(dataDir, hwnd)
-  writeFileSync(file + '.tmp', JSON.stringify(from))
-  renameSync(file + '.tmp', file)
+  atomicWrite(file, JSON.stringify(from))
 }
 
 export function clearHandover(dataDir: string, hwnd: string): void {

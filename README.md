@@ -21,6 +21,12 @@ https://github.com/user-attachments/assets/f376ff46-90ed-44b8-8516-364641b3e4e3
 
 ---
 
+## Project Cockpit preview
+
+[Download the Windows preview](../../releases/download/v0.6.1/CLI-Organizer-0.6.1-portable.exe) · [Cockpit usage guide (German)](docs/cockpit-usage.md)
+
+Track projects, agent sessions, waiting items, tasks and contracts in the new Cockpit view. Projects, tasks and check evidence are stored locally and loaded when the app reopens. Run approved contract checks and record explicit manual acceptance; changed source invalidates old evidence. The observing Claude plugin is optional. Live question and permission hook interactions still need manual validation.
+
 ## The problem
 
 You run Claude Code in one terminal, Codex in another, a dev server in a third, a build in a fourth.

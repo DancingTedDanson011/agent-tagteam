@@ -5,7 +5,7 @@ import type { AgentProvider, AgentStart, FreeRect, Lang, Layout, SlotPlacement, 
 
 const MAX_PLACEMENTS = 1000
 const MAX_TEXT = 200
-const VIEWS: readonly ViewMode[] = ['free', 'grid', 'focus', 'tabs']
+const VIEWS: readonly ViewMode[] = ['free', 'grid', 'focus', 'tabs', 'cockpit']
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)

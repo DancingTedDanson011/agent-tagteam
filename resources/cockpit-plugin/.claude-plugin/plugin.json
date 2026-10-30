@@ -1,0 +1,6 @@
+{
+  "name": "cli-organizer-cockpit",
+  "version": "0.1.0",
+  "author": { "name": "Marco Sadjadi" },
+  "description": "Optional local observation feed for CLI Organizer. Does not approve, block, or install anything."
+}

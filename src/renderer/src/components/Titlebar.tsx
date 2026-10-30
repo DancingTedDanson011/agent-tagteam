@@ -8,7 +8,8 @@ const VIEWS: Array<{ id: ViewMode; icon: IconName; key: string }> = [
   { id: 'focus', icon: 'focus', key: '1' },
   { id: 'grid', icon: 'grid', key: '2' },
   { id: 'free', icon: 'free', key: '3' },
-  { id: 'tabs', icon: 'tabs', key: '4' }
+  { id: 'tabs', icon: 'tabs', key: '4' },
+  { id: 'cockpit', icon: 'layers', key: '5' }
 ]
 const LANGS: Lang[] = ['de', 'en']
 

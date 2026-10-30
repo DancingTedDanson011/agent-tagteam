@@ -10,7 +10,13 @@ language, and the **DE | EN** switch in the title bar changes it and remembers t
 
 ## Starten
 
-`dist/CLI-Organizer-0.5.0-portable.exe` doppelklicken. Keine Installation nötig.
+[Portable Windows-Vorabversion herunterladen](../../releases/download/v0.6.1/CLI-Organizer-0.6.1-portable.exe) und doppelklicken. Keine Installation nötig.
+
+## Projekt-Cockpit
+
+Die Vorabversion ergänzt eine Übersicht für Projekte, Sessions und Rückfragen, ein Aufgabenboard sowie Verträge mit tatsächlich ausgeführten Checks und ausdrücklicher manueller Abnahme. Projekte, Aufgaben und Prüfnachweise bleiben lokal gespeichert und werden beim Wiederöffnen geladen. Änderungen am Quellstand machen ältere Nachweise ungültig. [Cockpit-Anleitung](docs/cockpit-usage.md).
+
+Das beobachtende Claude-Plugin ist optional. Reale Frage- und Permission-Hookabläufe müssen weiterhin manuell geprüft werden.
 
 ## Bedienung
 
